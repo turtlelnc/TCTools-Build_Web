@@ -124,7 +124,7 @@ jobs:
             experimental: false
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # ccache is pre-installed on GitHub Windows images; install-qt-action wires
       # its own ccache setup for the Linux/macOS jobs.
@@ -241,7 +241,7 @@ jobs:
 
       - name: Upload binaries 上传二进制产物
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TCBuildWeb-windows-${{ matrix.id }}-${{ github.sha }}
           path: |
@@ -252,7 +252,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-windows-${{ matrix.id }}-${{ github.run_id }}
           # CMake writes the configure/build logs into the binary dir; the vcpkg
@@ -320,7 +320,7 @@ jobs:
             experimental: false
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -404,7 +404,7 @@ jobs:
 
       - name: Upload binaries 上传二进制产物
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TCBuildWeb-macos-${{ matrix.id }}-${{ github.sha }}
           path: |
@@ -415,7 +415,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-macos-${{ matrix.id }}-${{ github.run_id }}
           path: |
@@ -462,7 +462,7 @@ jobs:
             experimental: true
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -543,7 +543,7 @@ jobs:
 
       - name: Upload binaries 上传二进制产物
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TCBuildWeb-linux-${{ matrix.id }}-${{ github.sha }}
           path: |
@@ -554,7 +554,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-linux-${{ matrix.id }}-${{ github.run_id }}
           path: |
@@ -574,7 +574,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -651,7 +651,7 @@ jobs:
           ls -l dist
 
       - name: Upload AppImage 上传 AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TCBuildWeb-linux-appimage-${{ github.sha }}
           path: |
@@ -669,7 +669,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -728,7 +728,7 @@ jobs:
 
       - name: Upload test binaries 上传测试产物
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TCBuildWeb-tests-${{ github.sha }}
           path: build/tests_Tests_测试/**
@@ -737,7 +737,7 @@ jobs:
 
       - name: Upload test logs 上传测试日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-tests-${{ github.run_id }}
           path: |
