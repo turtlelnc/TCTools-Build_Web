@@ -139,7 +139,7 @@ jobs:
       TCBW_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -240,7 +240,7 @@ jobs:
           Get-Item -LiteralPath (Join-Path $outDir $outFile) | Format-List Name,Length
 
       - name: Upload installer 上传安装包
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-windows-${{ matrix.id }}
           path: dist/*-setup.exe
@@ -249,7 +249,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-release-windows-${{ matrix.id }}-${{ github.run_id }}
           path: |
@@ -284,7 +284,7 @@ jobs:
       TCBW_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -349,7 +349,7 @@ jobs:
             --output-dir "$PWD/dist"
 
       - name: Upload DMG 上传 DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-macos-${{ matrix.id }}
           path: dist/*.dmg
@@ -358,7 +358,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-release-macos-${{ matrix.id }}-${{ github.run_id }}
           path: |
@@ -379,7 +379,7 @@ jobs:
       TCBW_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout 检出代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
@@ -447,7 +447,7 @@ jobs:
             --version "${TCBW_VERSION}"
 
       - name: Upload Linux packages 上传 Linux 安装包
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-linux
           path: |
@@ -458,7 +458,7 @@ jobs:
 
       - name: Upload logs 上传日志
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-release-linux-${{ github.run_id }}
           path: |
@@ -478,7 +478,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download all installers 下载全部安装包
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: installer-*
           path: dist
