@@ -1,0 +1,747 @@
+# ============================================================================
+#  build_构建.yml -- main CI matrix: configure, build, test, upload artifacts
+#  build_构建.yml —— 主 CI 矩阵：配置、构建、测试、上传构建产物
+#
+#  TCTools-Build_Web (TC-BuildWeb) v0.1.0-rc1
+#
+#  NOTE ON THE DIRECTORY NAME / 关于目录名:
+#    This file lives in `.github/workflows/` -- the literal name `workflows` is
+#    REQUIRED by GitHub and is the documented exception to the repository's
+#    bilingual directory-naming rule.
+#    本文件位于 `.github/workflows/` —— `workflows` 是 GitHub 强制要求的字面
+#    名称，也是本仓库“目录名中英双语”规则唯一被文档化的例外。
+# ============================================================================
+name: Build 构建
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Weekly canary run -- catches Qt/runner-image drift even with no commits.
+    # 每周金丝雀运行 —— 即使没有提交，也能发现 Qt / 运行器镜像的漂移。
+    - cron: '17 5 * * 1'
+
+# Least privilege: CI only ever needs to read the repo.
+# 最小权限：CI 只需要读取仓库。
+permissions:
+  contents: read
+
+# Supersede in-flight runs for the same ref; never cancel main/tag builds.
+# 同一 ref 上正在运行的作业会被取代；main / tag 构建永不取消。
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Pinned Qt + aqtinstall. Bump deliberately, never implicitly.
+  # 固定 Qt 与 aqtinstall 版本。必须有意升级，绝不隐式漂移。
+  QT_VERSION: '6.8.*'
+  AQT_VERSION: '==3.3.*'
+  # Addon modules. `qtwebengine` is deliberately NOT in this list -- see the
+  # per-job `require_webengine` flag below.
+  # 附加模块。这里刻意不含 `qtwebengine` —— 见下方每个作业的 `require_webengine`。
+  QT_MODULES: 'qtcharts qtmultimedia qtshadertools qtquick3d'
+  # Qt WebEngine is optional in CMake (TCBW_ENABLE_WEBENGINE defaults ON but must
+  # degrade gracefully). Jobs that cannot host WebEngine pass OFF to stay green.
+  # Qt WebEngine 在 CMake 中是可选的（TCBW_ENABLE_WEBENGINE 默认 ON，但必须能
+  # 优雅降级）。无法承载 WebEngine 的作业传 OFF，以保证 CI 为绿。
+  CMAKE_ARGS_COMMON: '-DTCBW_BUILD_TESTS=ON -DTCBW_WARNINGS_AS_ERRORS=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache'
+
+jobs:
+  # ==========================================================================
+  #  Windows -- x64 / x86 / ARM64-native / ARM64-cross / MinGW-w64
+  #  Windows —— x64 / x86 / ARM64 原生 / ARM64 交叉 / MinGW-w64
+  # ==========================================================================
+  windows:
+    name: Windows ${{ matrix.arch_label }} (${{ matrix.toolchain }}) / Qt ${{ matrix.qt_arch }}
+    # Runner choice / 运行器选择:
+    #   windows-latest (x64) covers Windows 11 and Windows 10 1709+ behaviour.
+    #   windows-11-arm is GitHub's native Windows-on-ARM image.
+    #   windows-latest + `-A ARM64` keeps an MSVC cross-compile fallback so ARM64
+    #   coverage survives even if the native image is unavailable to a fork.
+    #   windows-latest (x64) 覆盖 Windows 11 与 Windows 10 1709+。
+    #   windows-11-arm 是 GitHub 的原生 Windows-on-ARM 镜像。
+    #   windows-latest + `-A ARM64` 保留 MSVC 交叉编译回退路径。
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: msvc-x64
+            runner: windows-latest
+            arch: x64
+            arch_label: x64
+            toolchain: msvc
+            qt_arch: win64_msvc2022_64
+            qt_modules: 'qtcharts qtmultimedia qtshadertools qtquick3d'
+            webengine: 'ON'
+            experimental: false
+          - id: msvc-x86
+            runner: windows-latest
+            arch: x86
+            arch_label: x86
+            toolchain: msvc
+            # Qt does not publish a 32-bit MSVC 2022 desktop kit. The x86 target
+            # therefore uses the MinGW 32-bit kit with the MSVC-free Ninja path.
+            # Qt 不发布 32 位 MSVC 2022 桌面套件，因此 x86 使用 MinGW 32 位套件。
+            qt_arch: win32_mingw
+            qt_modules: 'qtcharts qtmultimedia'
+            webengine: 'OFF'
+            experimental: false
+          - id: msvc-arm64-native
+            runner: windows-11-arm
+            arch: arm64
+            arch_label: ARM64-native
+            toolchain: msvc
+            qt_arch: win64_msvc2022_arm64
+            qt_modules: 'qtcharts qtmultimedia'
+            webengine: 'OFF'
+            experimental: false
+          - id: msvc-arm64-cross
+            runner: windows-latest
+            arch: arm64
+            arch_label: ARM64-cross
+            toolchain: msvc
+            qt_arch: win64_msvc2022_arm64
+            qt_modules: 'qtcharts qtmultimedia'
+            webengine: 'OFF'
+            experimental: false
+          - id: mingw-x64
+            runner: windows-latest
+            arch: x64
+            arch_label: x64
+            toolchain: mingw
+            # The project primarily targets MinGW 14, so this job is the closest
+            # match to the developers' own toolchain.
+            # 本项目主要面向 MinGW 14，因此该作业最贴近开发者本机工具链。
+            qt_arch: win64_mingw
+            qt_modules: 'qtcharts qtmultimedia qtshadertools'
+            webengine: 'OFF'
+            experimental: false
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      # ccache is pre-installed on GitHub Windows images; install-qt-action wires
+      # its own ccache setup for the Linux/macOS jobs.
+      # GitHub Windows 镜像已预装 ccache。
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          modules: ${{ matrix.qt_modules }}
+          cache: true
+          cache-key-prefix: qt-${{ matrix.id }}
+          aqtversion: ${{ env.AQT_VERSION }}
+          setup-python: true
+
+      - name: Preflight / 预检
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_OS -ne 'Windows') { throw "Expected a Windows runner, got '$env:RUNNER_OS'." }
+          Write-Host "runner=$env:RUNNER_OS  arch=${{ matrix.arch }}  toolchain=${{ matrix.toolchain }}"
+          Write-Host "QT_ROOT_DIR=$env:QT_ROOT_DIR"
+          if (-not (Test-Path -LiteralPath (Join-Path $env:QT_ROOT_DIR 'lib'))) {
+            throw "Qt lib directory missing under QT_ROOT_DIR=$env:QT_ROOT_DIR"
+          }
+          if ('${{ matrix.toolchain }}' -eq 'mingw') {
+            $gxx = Get-Command g++ -ErrorAction SilentlyContinue
+            if (-not $gxx) {
+              throw 'MinGW g++ not found on PATH. Set QT_ROOT_DIR/Tools or install mingw-w64 before building.'
+            }
+            Write-Host "minGW g++ -> $($gxx.Source)"
+          }
+
+      # ----------------------------------------------------------------------
+      #  Configure 配置
+      # ----------------------------------------------------------------------
+      - name: Configure 配置
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Guard 1 -- the CMake graph references sources that must exist.
+          # 守卫 1 —— CMake 引用的源文件必须存在。
+          $required = @(
+            'CMakeLists.txt',
+            'src_Source_源代码/core_Core_核心/Types.cpp',
+            'resources_Resources_资源/qml_QML_界面',
+            'resources_Resources_资源/icons_Icons_图标/app.qrc',
+            'tests_Tests_测试/CMakeLists.txt'
+          )
+          $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) })
+          if ($missing.Count -gt 0) {
+            Write-Host '::error title=Incomplete source tree::CMakeLists.txt references paths that do not exist yet.'
+            $missing | ForEach-Object { Write-Host "::error::missing -> $_" }
+            throw "Source tree is incomplete ($($missing.Count) path(s) missing); cannot configure."
+          }
+
+          # Guard 2 -- tests_Tests_测试 must actually register a CTest suite.
+          # 守卫 2 —— tests_Tests_测试 必须真正注册一个 CTest 测试套件。
+          if (-not (Select-String -Path 'tests_Tests_测试/CMakeLists.txt' -Pattern 'add_test|qt_add_test|qt_add_executable' -Quiet)) {
+            throw "tests_Tests_测试/CMakeLists.txt registers no tests (expected add_test/qt_add_test)."
+          }
+
+          $archFlag = @{ 'x64' = 'x64'; 'x86' = 'Win32'; 'arm64' = 'ARM64' }['${{ matrix.arch }}']
+
+          #  Ninja cannot build this tree on Windows: the bilingual folder names
+          #  ("src_Source_源代码") make every object path non-ASCII, and Ninja
+          #  hands the compiler a byte-oriented command line, so object creation
+          #  fails with "can't create ...obj: No such file or directory".
+          #  GNU Make does not have that limitation, so the MinGW toolchain uses
+          #  "MinGW Makefiles". MSVC is unaffected (MSBuild is Unicode-native).
+          #  Ninja 无法在 Windows 上构建本源码树：双语文件夹名（"src_Source_源代码"）
+          #  使每个目标文件路径都含非 ASCII 字符，而 Ninja 以字节形式把命令行交给
+          #  编译器，于是创建目标文件会失败并报
+          #  "can't create ...obj: No such file or directory"。
+          #  GNU Make 没有该限制，因此 MinGW 工具链使用 "MinGW Makefiles"。
+          #  MSVC 不受影响（MSBuild 原生支持 Unicode）。
+          $generator = if ('${{ matrix.toolchain }}' -eq 'mingw') { 'MinGW Makefiles' } else { 'Visual Studio 17 2022' }
+
+          $qtFlag = '-DTCBW_ENABLE_WEBENGINE=${{ matrix.webengine }}'
+          Write-Host "Configuring: generator='$generator' arch='$archFlag' qt='$qtFlag'"
+          if ($generator -eq 'MinGW Makefiles') {
+            cmake -S . -B build -G "MinGW Makefiles" `
+              -DCMAKE_BUILD_TYPE=Release `
+              -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+              $qtFlag.Split(' ') `
+              $env:CMAKE_ARGS_COMMON.Split(' ')
+          } else {
+            cmake -S . -B build -G "$generator" -A "$archFlag" `
+              -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+              $qtFlag.Split(' ') `
+              $env:CMAKE_ARGS_COMMON.Split(' ')
+          }
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed with exit code $LASTEXITCODE." }
+
+      - name: Build 构建
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE." }
+
+      # ----------------------------------------------------------------------
+      #  Test 测试
+      # ----------------------------------------------------------------------
+      - name: Test 测试
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "ctest failed with exit code $LASTEXITCODE." }
+
+      - name: Upload binaries 上传二进制产物
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCBuildWeb-windows-${{ matrix.id }}-${{ github.sha }}
+          path: |
+            build/**/TCTools-Build_Web.exe
+            build/**/*.dll
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-windows-${{ matrix.id }}-${{ github.run_id }}
+          # CMake writes the configure/build logs into the binary dir; the vcpkg
+          # and CMake error logs are the ones that actually explain a failure.
+          # CMake 将配置/构建日志写入构建目录，其中错误日志才是失败原因所在。
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  macOS -- Apple Silicon / Intel / universal binary
+  #  macOS —— Apple Silicon / Intel / 通用二进制
+  # ==========================================================================
+  macos:
+    name: macOS ${{ matrix.arch_label }} / ${{ matrix.runner }}
+    # Runner notes / 运行器说明:
+    #   `macos-14` and `macos-latest` are Apple Silicon (arm64).
+    #   `macos-13` was retired by GitHub in Sept 2025; the supported Intel (x86_64)
+    #   image is now `macos-15-intel`. The literal `macos-13` label is kept in the
+    #   matrix with `experimental: true` so the row is visible and harmless, and
+    #   the `macos-15-intel` row provides the archiving Intel coverage.
+    #   `macos-14` 与 `macos-latest` 为 Apple Silicon（arm64）。
+    #   GitHub 已于 2025 年 9 月下线 `macos-13`，现行 Intel（x86_64）镜像为
+    #   `macos-15-intel`。矩阵保留 `macos-13` 行并标记 experimental，另加一行
+    #   `macos-15-intel` 提供仍在支持的 Intel 覆盖。
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64-14
+            runner: macos-14
+            arch_label: arm64 (Apple Silicon)
+            osx_arch: arm64
+            webengine: 'ON'
+            experimental: false
+          - id: macos-arm64-latest
+            runner: macos-latest
+            arch_label: arm64 (Apple Silicon, latest)
+            osx_arch: arm64
+            webengine: 'OFF'
+            experimental: false
+          - id: macos-x86_64-intel-supported
+            runner: macos-15-intel
+            arch_label: x86_64 (Intel)
+            osx_arch: x86_64
+            webengine: 'OFF'
+            experimental: false
+          - id: macos-x86_64-13-legacy
+            runner: macos-13
+            arch_label: x86_64 (Intel, retired image)
+            osx_arch: x86_64
+            webengine: 'OFF'
+            experimental: true
+          - id: macos-universal
+            runner: macos-14
+            arch_label: universal (arm64 + x86_64)
+            osx_arch: 'arm64;x86_64'
+            webengine: 'OFF'
+            experimental: false
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-macos-${{ matrix.id }}
+          aqtversion: ${{ env.AQT_VERSION }}
+          setup-python: true
+
+      - name: Preflight / 预检
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_OS}" == "macOS" ]] || { echo "::error::expected macOS runner, got '${RUNNER_OS}'"; exit 1; }
+          echo "runner=${RUNNER_OS}  macos_arch=${{ matrix.osx_arch }}"
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
+          command -v ninja >/dev/null || brew install ninja
+          # The universal job asks the linker for both slices, so verify the host
+          # SDK can actually produce x86_64 objects before spending build time.
+          # 通用二进制作业要求两种切片，因此先确认宿主 SDK 能生成 x86_64 目标文件。
+          if [[ "${{ matrix.osx_arch }}" == *"x86_64"* ]]; then
+            echo 'int main(){return 0;}' > "${RUNNER_TEMP}/slice.c"
+            clang -arch x86_64 -c "${RUNNER_TEMP}/slice.c" -o "${RUNNER_TEMP}/slice.o"
+            echo "x86_64 slice: OK"
+          fi
+
+      - name: Configure 配置
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required=(
+            'CMakeLists.txt'
+            'src_Source_源代码/core_Core_核心/Types.cpp'
+            'resources_Resources_资源/qml_QML_界面'
+            'resources_Resources_资源/icons_Icons_图标/app.qrc'
+            'tests_Tests_测试/CMakeLists.txt'
+          )
+          missing=()
+          for p in "${required[@]}"; do [[ -e "$p" ]] || missing+=("$p"); done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Incomplete source tree::CMakeLists.txt references paths that do not exist yet."
+            printf '::error::missing -> %s\n' "${missing[@]}"
+            exit 1
+          fi
+          if ! grep -Eq 'add_test|qt_add_test|qt_add_executable' 'tests_Tests_测试/CMakeLists.txt'; then
+            echo "::error::tests_Tests_测试/CMakeLists.txt registers no tests (expected add_test/qt_add_test)."
+            exit 1
+          fi
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.osx_arch }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DTCBW_ENABLE_WEBENGINE=${{ matrix.webengine }} \
+            -DTCBW_BUILD_TESTS=ON \
+            -DTCBW_WARNINGS_AS_ERRORS=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build 构建
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --parallel
+
+      - name: Test 测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `-C Release` is harmless for single-config generators and required by
+          # multi-config ones, so it is passed uniformly across the matrix.
+          # `-C Release` 对单配置生成器无害、对多配置生成器必需，故矩阵统一传入。
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload binaries 上传二进制产物
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCBuildWeb-macos-${{ matrix.id }}-${{ github.sha }}
+          path: |
+            build/**/TCTools-Build_Web.app
+            build/**/TCTools-Build_Web
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-macos-${{ matrix.id }}-${{ github.run_id }}
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  Linux -- Debian/Ubuntu 22.04 + 24.04
+  #  Linux —— Debian/Ubuntu 22.04 与 24.04
+  # ==========================================================================
+  linux:
+    name: Linux ${{ matrix.distro }} (${{ matrix.arch_label }})
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: ubuntu-22.04-x64
+            runner: ubuntu-22.04
+            distro: Ubuntu 22.04 / Debian 12
+            arch_label: x86_64
+            webengine: 'OFF'
+            experimental: false
+          - id: ubuntu-24.04-x64
+            runner: ubuntu-24.04
+            distro: Ubuntu 24.04 / Debian 13
+            arch_label: x86_64
+            # Qt WebEngine needs a newer X11/GL stack than the hosted image
+            # reliably provides; the app must degrade to QML canvas preview.
+            # Qt WebEngine 依赖的 X11/GL 栈在托管镜像上不稳定；应用须降级为 QML
+            # 画布预览。此作业用于验证降级路径。
+            webengine: 'OFF'
+            experimental: false
+          - id: ubuntu-24.04-arm64
+            runner: ubuntu-24.04-arm
+            distro: Ubuntu 24.04
+            arch_label: aarch64
+            webengine: 'OFF'
+            experimental: true
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-linux-${{ matrix.id }}
+          aqtversion: ${{ env.AQT_VERSION }}
+          setup-python: true
+
+      - name: Preflight / 预检
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_OS}" == "Linux" ]] || { echo "::error::expected Linux runner, got '${RUNNER_OS}'"; exit 1; }
+          echo "runner=${RUNNER_OS}  arch=${RUNNER_ARCH}"
+          echo "QT_ROOT_DIR=${QT_ROOT_DIR}"
+          sudo apt-get update -qq
+          # ninja + ccache + the X11/GL dev packages Qt's CMake config probes.
+          # ninja、ccache 以及 Qt CMake 配置会探测的 X11/GL 开发包。
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache \
+            libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-x11-dev \
+            libxcb-cursor0 libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-shape0-dev libxcb-xinerama0-dev libxcb-randr0-dev \
+            libxcb-render-util0-dev libxcb-xkb-dev libxkbcommon-dev \
+            libfontconfig1-dev libfreetype6-dev
+          ccache --set-config=max_size=500M
+
+      - name: Configure 配置
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            'CMakeLists.txt'
+            'src_Source_源代码/core_Core_核心/Types.cpp'
+            'resources_Resources_资源/qml_QML_界面'
+            'resources_Resources_资源/icons_Icons_图标/app.qrc'
+            'tests_Tests_测试/CMakeLists.txt'
+          )
+          missing=()
+          for p in "${required[@]}"; do [[ -e "$p" ]] || missing+=("$p"); done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Incomplete source tree::CMakeLists.txt references paths that do not exist yet."
+            printf '::error::missing -> %s\n' "${missing[@]}"
+            exit 1
+          fi
+          if ! grep -Eq 'add_test|qt_add_test|qt_add_executable' 'tests_Tests_测试/CMakeLists.txt'; then
+            echo "::error::tests_Tests_测试/CMakeLists.txt registers no tests (expected add_test/qt_add_test)."
+            exit 1
+          fi
+
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DTCBW_ENABLE_WEBENGINE=${{ matrix.webengine }} \
+            -DTCBW_BUILD_TESTS=ON \
+            -DTCBW_WARNINGS_AS_ERRORS=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build 构建
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --parallel
+
+      - name: Test 测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Offscreen platform: hosted Ubuntu images have no display server.
+          # 使用 offscreen 平台：托管 Ubuntu 镜像没有显示服务器。
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload binaries 上传二进制产物
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCBuildWeb-linux-${{ matrix.id }}-${{ github.sha }}
+          path: |
+            build/**/TCTools-Build_Web
+            build/**/*.so
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-linux-${{ matrix.id }}-${{ github.run_id }}
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/CMakeFiles/CMakeError.log
+            build/CMakeFiles/CMakeOutput.log
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  AppImage -- single-file portable Linux bundle
+  #  AppImage —— 单文件可移植 Linux 包
+  # ==========================================================================
+  appimage:
+    name: Linux AppImage (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-appimage
+          aqtversion: ${{ env.AQT_VERSION }}
+          setup-python: true
+
+      - name: Install packaging tools 安装打包工具
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache file desktop-file-utils libgl1-mesa-dev \
+            libxkbcommon-x11-dev libxcb-cursor0 libxcb-icccm4-dev \
+            libxcb-keysyms1-dev libxcb-shape0-dev libxcb-randr0-dev \
+            libxcb-render-util0-dev libxcb-xkb-dev libxkbcommon-dev
+          # linuxdeploy bundles the AppDir and writes the AppImage.
+          # linuxdeploy 负责打包 AppDir 并生成 AppImage。
+          curl -fsSL -o "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage"
+          "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage" --appimage-extract-and-run --version
+
+      - name: Configure and build 配置与构建
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in 'CMakeLists.txt' 'src_Source_源代码/core_Core_核心/Types.cpp' \
+                   'resources_Resources_资源/qml_QML_界面' \
+                   'resources_Resources_资源/icons_Icons_图标/app.qrc' \
+                   'tests_Tests_测试/CMakeLists.txt'; do
+            [[ -e "$p" ]] || { echo "::error::missing -> $p"; exit 1; }
+          done
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${RUNNER_TEMP}/AppDir/usr" \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DTCBW_ENABLE_WEBENGINE=OFF \
+            -DTCBW_BUILD_TESTS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build --parallel
+
+      - name: Test 测试
+        shell: bash
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build AppImage 生成 AppImage
+        shell: bash
+        env:
+          LINUXDEPLOY: ${{ runner.temp }}/linuxdeploy-x86_64.AppImage
+        run: |
+          set -euo pipefail
+          # Delegate to the repository's own packaging script instead of inlining
+          # the layout logic: it stages usr/bin, usr/share/applications and the
+          # hicolor icons, copies the Qt QML import tree, resolves the icon asset
+          # (which may not exist yet), runs linuxdeploy and writes a .sha256.
+          # 交给仓库自带的打包脚本，而不是在此内联目录布局逻辑：它负责布置
+          # usr/bin、usr/share/applications 与 hicolor 图标，复制 Qt QML 导入目录树，
+          # 解析图标素材（可能尚不存在），运行 linuxdeploy 并写入 .sha256。
+          bash './packaging_Packaging_打包/linux_Linux/build_appimage.sh' \
+            --build-dir build \
+            --output-dir dist \
+            --linuxdeploy "${LINUXDEPLOY}" \
+            --qt-dir "${QT_ROOT_DIR}" \
+            --version "0.1.0-rc1"
+          ls -l dist
+
+      - name: Upload AppImage 上传 AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCBuildWeb-linux-appimage-${{ github.sha }}
+          path: |
+            dist/*.AppImage
+            dist/*.AppImage.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  # ==========================================================================
+  #  Dedicated test job -- explicit -DTCBW_BUILD_TESTS=ON, warnings as errors
+  #  专用测试作业 —— 显式 -DTCBW_BUILD_TESTS=ON，并把警告视为错误
+  # ==========================================================================
+  test:
+    name: Tests 测试 (TCBW_BUILD_TESTS=ON, Werror)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          modules: qtshadertools
+          cache: true
+          cache-key-prefix: qt-tests
+          aqtversion: ${{ env.AQT_VERSION }}
+          setup-python: true
+
+      - name: Install test prerequisites 安装测试依赖
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache libgl1-mesa-dev libxkbcommon-x11-dev \
+            libxcb-cursor0 libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-shape0-dev libxcb-randr0-dev libxcb-render-util0-dev \
+            libxcb-xkb-dev libxkbcommon-dev
+          ccache --set-config=max_size=500M
+
+      - name: Configure (tests ON, warnings as errors) 配置
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -euo pipefail
+          for p in 'CMakeLists.txt' 'src_Source_源代码/core_Core_核心/Types.cpp' \
+                   'resources_Resources_资源/qml_QML_界面' \
+                   'resources_Resources_资源/icons_Icons_图标/app.qrc' \
+                   'tests_Tests_测试/CMakeLists.txt'; do
+            [[ -e "$p" ]] || { echo "::error::missing -> $p"; exit 1; }
+          done
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DTCBW_BUILD_TESTS=ON \
+            -DTCBW_ENABLE_WEBENGINE=OFF \
+            -DTCBW_WARNINGS_AS_ERRORS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build 构建
+        shell: bash
+        run: cmake --build build --parallel
+
+      - name: Test 测试
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      - name: Upload test binaries 上传测试产物
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TCBuildWeb-tests-${{ github.sha }}
+          path: build/tests_Tests_测试/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload test logs 上传测试日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-tests-${{ github.run_id }}
+          path: |
+            build/Testing/Temporary/LastTest.log
+            build/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: ignore
+          retention-days: 7

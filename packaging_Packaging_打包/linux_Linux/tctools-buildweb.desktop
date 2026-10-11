@@ -1,0 +1,58 @@
+# ============================================================================
+#  tctools-buildweb.desktop -- freedesktop.org launcher entry
+#  tctools-buildweb.desktop —— freedesktop.org 启动器条目
+#
+#  Validated with `desktop-file-validate` in CI before it is packaged.
+#  在打包前由 CI 使用 `desktop-file-validate` 校验。
+#
+#  Installed to /usr/share/applications/tctools-buildweb.desktop, and also placed
+#  inside an AppImage's AppDir as usr/share/applications/tctools-buildweb.desktop.
+#  安装到 /usr/share/applications/tctools-buildweb.desktop，同时也会放入 AppImage
+#  AppDir 的 usr/share/applications/tctools-buildweb.desktop。
+# ============================================================================
+[Desktop Entry]
+Type=Application
+Version=1.0
+
+# Name / 名称 -- English first, then the Chinese localisation below.
+# Name / 名称 —— 先英文，中文本地化见下方。
+Name=TCTools-Build_Web
+Name[zh_CN]=TCTools-Build_Web（网页构建器）
+GenericName=Visual Web Page Builder
+GenericName[zh_CN]=可视化网页构建器
+Comment=Build web pages visually with drag-and-drop layout and Scratch-style block programming
+Comment[zh_CN]=通过拖放式布局与 Scratch 风格积木编程，可视化地构建网页
+
+# Exec / 执行命令 -- %F expands to the project files passed on the command line.
+# Exec / 执行命令 —— %F 展开为命令行传入的工程文件。
+Exec=TCTools-Build_Web %F
+
+# Icon / 图标 -- installed as a hicolor theme icon of the same name.
+# Icon / 图标 —— 以同名文件安装到 hicolor 主题图标目录。
+Icon=tctools-buildweb
+
+Terminal=false
+
+# Categories must come from the registered freedesktop.org vocabulary.
+# Categories 必须取自 freedesktop.org 的注册词表。
+Categories=Development;IDE;Graphics;
+Keywords=web;html;css;javascript;builder;drag-and-drop;scratch;blocks;
+Keywords[zh_CN]=网页;HTML;CSS;JavaScript;构建器;拖放;积木;
+
+# MIME types this application can open (.tcbw project files).
+# 本应用可打开的 MIME 类型（.tcbw 工程文件）。
+MimeType=application/x-tcbw-project;
+StartupNotify=true
+StartupWMClass=TCTools-Build_Web
+
+# X-AppStream / X-AppImage metadata 元数据
+X-AppImage-Version=0.1.0-rc1
+X-AppImage-Name=TC-BuildWeb
+
+# Actions (right-click menu) 右键菜单动作
+Actions=NewProject;
+
+[Desktop Action NewProject]
+Name=New Project
+Name[zh_CN]=新建工程
+Exec=TCTools-Build_Web --new-project

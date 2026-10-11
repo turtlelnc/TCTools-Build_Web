@@ -1,0 +1,67 @@
+# ============================================================================
+#  debian_control/control -- dpkg-deb control template for TCTools-Build_Web
+#  debian_control/control —— TCTools-Build_Web 的 dpkg-deb control 模板
+#
+#  This is a TEMPLATE. `deploy_linux.sh` rewrites Version, Architecture,
+#  Installed-Size and Maintainer at build time, so the values below are only the
+#  documented defaults.
+#  本文件是**模板**。`deploy_linux.sh` 会在构建时重写 Version、Architecture、
+#  Installed-Size 与 Maintainer，因此下面的值仅为文档化的默认值。
+#
+#  Install with / 安装方式: sudo apt install ./tctools-buildweb_0.1.0-rc1_amd64.deb
+# ============================================================================
+Package: tctools-buildweb
+Version: 0.1.0-rc1
+Section: devel
+Priority: optional
+Architecture: amd64
+Installed-Size: 0
+Maintainer: turtlelnc <turtlelnc@users.noreply.github.com>
+Homepage: https://github.com/turtlelnc/TCTools-Build_Web
+Description: Visual web page builder with Scratch-style block programming
+ TCTools-Build_Web (TC-BuildWeb) lets users build web pages visually:
+ drag-and-drop layout editing plus Scratch-style graphical block programming,
+ with .html/.js export and an optional AI assistant.
+ .
+ 通过TCTools-Build_Web，在软件中通过拖动与图形化编程（scratch）等可视化方式，
+ 让不会编程的新手也能自由构建属于自己的网页。
+Vcs-Git: https://github.com/turtlelnc/TCTools-Build_Web.git
+Vcs-Browser: https://github.com/turtlelnc/TCTools-Build_Web
+
+# Qt 6 runtime libraries. The exact package names differ between Ubuntu releases
+# (Ubuntu 24.04 ships qml6-module-* packages), so alternatives are declared with
+# the "|" operator where several are acceptable.
+# Qt 6 运行时库。具体包名在不同 Ubuntu 版本间不同（Ubuntu 24.04 提供
+# qml6-module-* 包），因此对可接受多选的情况下使用 "|" 声明备选。
+Depends: libc6 (>= 2.35),
+         libstdc++6 (>= 12),
+         libgcc-s1 (>= 12),
+         libqt6core6 (>= 6.5),
+         libqt6gui6 (>= 6.5),
+         libqt6qml6 (>= 6.5),
+         libqt6quick6 (>= 6.5),
+         libqt6quickcontrols2-6 (>= 6.5),
+         libqt6network6 (>= 6.5),
+         libqt6sql6 (>= 6.5),
+         libqt6concurrent6 (>= 6.5),
+         libqt6svg6 (>= 6.5),
+         qml6-module-qtquick | qml-module-qtquick2,
+         qml6-module-qtquick-controls | qml-module-qtquick-controls2,
+         qml6-module-qtquick-layouts | qml-module-qtquick-layouts,
+         libgl1,
+         libxkbcommon0,
+         libfontconfig1
+
+# Qt WebEngine is optional (the CMake option TCBW_ENABLE_WEBENGINE degrades
+# gracefully), so it is only a recommendation, never a requirement.
+# Qt WebEngine 是可选的（CMake 选项 TCBW_ENABLE_WEBENGINE 可优雅降级），
+# 因此仅作为推荐项，绝不作硬性依赖。
+Recommends: libqt6webenginequick6 | libqt6webengine6,
+            qt6-translations-l10n,
+            xdg-utils
+
+Suggests: chromium | firefox-esr
+
+# The application builds standards-compliant static output; it needs no
+# server-side stack at install time.
+# 该应用生成符合标准的静态产物；安装时不需要任何服务端组件。

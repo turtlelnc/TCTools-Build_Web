@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ==========================================================================
+     tray_icon.svg -- monochrome tray / system-menu icon
+     tray_icon.svg —— 单色托盘 / 系统菜单图标
+
+     Monochrome so the operating system can tint it for light and dark menus.
+     采用单色，便于操作系统在浅色与深色菜单中自行着色。
+     ========================================================================== -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="TCTools-Build_Web">
+  <g fill="none" stroke="#000000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Browser frame / 浏览器外框 -->
+    <rect x="6" y="12" width="52" height="40" rx="9"/>
+    <!-- Toolbar rule / 工具栏分隔线 -->
+    <line x1="6" y1="24" x2="58" y2="24"/>
+    <!-- Title dot / 标题圆点 -->
+    <circle cx="14" cy="18" r="1.6" fill="#000000" stroke="none"/>
+    <circle cx="20" cy="18" r="1.6" fill="#000000" stroke="none"/>
+    <!-- Content lines / 内容行 -->
+    <line x1="15" y1="34" x2="38" y2="34"/>
+    <line x1="15" y1="43" x2="49" y2="43"/>
+  </g>
+</svg>

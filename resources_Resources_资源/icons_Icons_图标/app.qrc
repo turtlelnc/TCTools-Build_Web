@@ -1,0 +1,12 @@
+<!-- ==========================================================================
+     app.qrc -- application resources
+     app.qrc —— 应用程序资源
+     Only binary assets live here; QML files are managed by qt_add_qml_module.
+     此处仅存放二进制资源；QML 文件由 qt_add_qml_module 管理。
+     ========================================================================== -->
+<RCC>
+    <qresource prefix="/tcbw">
+        <file alias="icons/app_icon.svg">app_icon.svg</file>
+        <file alias="icons/tray_icon.svg">tray_icon.svg</file>
+    </qresource>
+</RCC>

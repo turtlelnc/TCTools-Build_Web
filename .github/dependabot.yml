@@ -1,0 +1,63 @@
+# ============================================================================
+#  dependabot.yml -- automated dependency updates for GitHub Actions
+#  dependabot.yml —— GitHub Actions 依赖的自动更新配置
+#
+#  Scope: this repository has no npm/pip/Cargo manifest, so only the
+#  `github-actions` ecosystem is configured. Adding package ecosystems later
+#  means adding entries here -- the update cadence below is the house default.
+#  范围：本仓库没有 npm/pip/Cargo 清单，因此只配置 `github-actions` 生态。
+#  后续若要加入包管理器生态，需要在此追加条目；下面的更新节奏为默认约定。
+# ============================================================================
+version: 2
+
+updates:
+  # --- GitHub Actions used by .github/workflows/*.yml --------------------------
+  # --- .github/workflows/*.yml 中使用的 GitHub Actions -------------------------
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:30'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    # Keep action bumps in their own PRs so a red CI run is unambiguous.
+    # 让 action 升级各自独立成 PR，使 CI 失败原因无歧义。
+    groups:
+      # Qt toolchain + artifact plumbing move together in practice.
+      # 实践中 Qt 工具链与产物上传相关 action 会一起更新。
+      ci-actions:
+        patterns:
+          - 'actions/*'
+          - 'jurplel/install-qt-action'
+      release-actions:
+        patterns:
+          - 'softprops/action-gh-release'
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: 'ci'
+      include: scope
+    reviewers:
+      - turtlelnc
+    assignees:
+      - turtlelnc
+
+  # --- GitHub Actions used by composite/reusable actions, if any are added -----
+  # --- 若将来添加复合/可复用 action，也覆盖其依赖 ------------------------------
+  - package-ecosystem: github-actions
+    directory: '/.github/actions'
+    schedule:
+      interval: monthly
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: 'ci'
+    # This directory does not exist yet; Dependabot simply reports nothing until
+    # it does, which is preferable to re-editing this file later.
+    # 该目录目前尚不存在；Dependabot 在其出现前不会报告任何内容，
+    # 这样优于日后再来修改本文件。

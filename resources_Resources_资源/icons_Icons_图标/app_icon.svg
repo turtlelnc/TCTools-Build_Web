@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ==========================================================================
+     app_icon.svg -- TCTools-Build_Web application icon
+     app_icon.svg —— TCTools-Build_Web 应用程序图标
+
+     Design: a rounded-square "app tile" in the Apple idiom, containing a
+     stylised browser window whose toolbar carries the three TC-BuildWeb
+     accent colours, plus a subtle block-programming notch motif.
+     设计：Apple 风格的圆角方形"应用磁贴"，其中是一个风格化的浏览器窗口，
+     工具栏承载 TC-BuildWeb 的三个强调色，并带有隐约的积木编程卡扣图案。
+     ========================================================================== -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"
+     role="img" aria-label="TCTools-Build_Web">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A8DFF"/>
+      <stop offset="1" stop-color="#0A5BD3"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.98"/>
+      <stop offset="1" stop-color="#EEF3FB" stop-opacity="0.98"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0A2A5E" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- App tile / 应用磁贴 -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#tile)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none"
+        stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="3"/>
+
+  <!-- Browser window / 浏览器窗口 -->
+  <g filter="url(#soft)">
+    <rect x="96" y="116" width="320" height="280" rx="26" fill="url(#glass)"/>
+  </g>
+
+  <!-- Toolbar with the three accent colours / 承载三个强调色的工具栏 -->
+  <rect x="96" y="116" width="320" height="52" rx="26" fill="#F5F7FB"/>
+  <rect x="96" y="142" width="320" height="26" fill="#F5F7FB"/>
+  <circle cx="128" cy="142" r="8" fill="#FF5F57"/>
+  <circle cx="154" cy="142" r="8" fill="#FEBC2E"/>
+  <circle cx="180" cy="142" r="8" fill="#28C840"/>
+  <rect x="206" y="132" width="182" height="20" rx="10" fill="#E2E8F2"/>
+
+  <!-- Page content: a heading and two text rows / 页面内容：标题与两行文本 -->
+  <rect x="126" y="196" width="150" height="20" rx="10" fill="#1D1D1F"/>
+  <rect x="126" y="230" width="260" height="12" rx="6" fill="#B9C4D4"/>
+  <rect x="126" y="252" width="212" height="12" rx="6" fill="#B9C4D4"/>
+
+  <!-- Block-programming stack with a notch / 带卡扣的积木堆叠 -->
+  <g>
+    <rect x="126" y="286" width="118" height="34" rx="10" fill="#FF9F0A"/>
+    <rect x="150" y="292" width="18" height="8" rx="4" fill="#FFFFFF" fill-opacity="0.85"/>
+    <rect x="142" y="326" width="132" height="34" rx="10" fill="#30D158"/>
+    <rect x="166" y="332" width="18" height="8" rx="4" fill="#FFFFFF" fill-opacity="0.85"/>
+    <rect x="158" y="366" width="96" height="34" rx="10" fill="#BF5AF2"/>
+  </g>
+
+  <!-- Cursor / 光标 -->
+  <path d="M330 268 L330 344 L352 324 L366 356 L382 348 L368 316 L394 314 Z"
+        fill="#1D1D1F" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+</svg>

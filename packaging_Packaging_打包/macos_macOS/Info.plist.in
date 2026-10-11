@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+   Info.plist.in ~~ macOS bundle metadata template for TCTools-Build_Web
+   Info.plist.in ~~ TCTools-Build_Web 的 macOS 应用包元数据模板
+
+   NOTE ON COMMENT SYNTAX / 关于注释语法:
+     XML forbids two consecutive hyphens inside a comment, so this file uses
+     "~~" and "===" separators instead of the long dash rule used by the other
+     packaging files. Writing two hyphens here would produce an invalid
+     Info.plist that `plutil -lint` rejects.
+     XML 禁止在注释中出现连续两个连字符，因此本文件使用 "~~" 与 "===" 作为分隔符，
+     而不是其他打包文件所用的长横线写法。在此写入两个连字符会生成无效的
+     Info.plist，并被 `plutil -lint` 拒绝。
+
+   CMake already generates a working Info.plist from the MACOSX_BUNDLE_* target
+   properties set in the top-level CMakeLists.txt. This template exists so the
+   project can add the keys CMake does not manage (document types, category,
+   high-resolution support, copyright, usage strings).
+
+   CMake 已依据顶层 CMakeLists.txt 中的 MACOSX_BUNDLE_* 目标属性生成可用的
+   Info.plist。本模板用于补充 CMake 不管理的键（文档类型、分类、高分屏支持、
+   版权、用途说明）。
+
+   Usage / 用法 (add to CMakeLists.txt, owned by the CMake owner):
+     set(TCBW_INFO_PLIST_IN  "${CMAKE_CURRENT_SOURCE_DIR}/packaging_Packaging_打包/macos_macOS/Info.plist.in")
+     configure_file("${TCBW_INFO_PLIST_IN}" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
+     set_target_properties(TCTools-Build_Web PROPERTIES
+         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+
+   Substitution placeholders / 替换占位符 (written with @...@ for @ONLY):
+     @TCBW_APP_VERSION@       CMake PROJECT_VERSION, e.g. 0.1.0
+     @TCBW_APP_VERSION_FULL@  full version incl. channel, e.g. 0.1.0-rc1
+     @TCBW_APP_BUNDLE_ID@     com.turtlelnc.tctools.buildweb
+     @TCBW_APP_NAME@          TCTools-Build_Web
+  ============================================================================
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Core identity 核心标识 -->
+    <key>CFBundleName</key>
+    <string>@TCBW_APP_NAME@</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>TCTools-Build_Web</string>
+
+    <key>CFBundleExecutable</key>
+    <string>@TCBW_APP_NAME@</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>@TCBW_APP_BUNDLE_ID@</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleSignature</key>
+    <string>????</string>
+
+    <!-- Versioning 版本 -->
+    <!-- CFBundleVersion must be a monotonic, dot-separated numeric string. -->
+    <!-- CFBundleVersion 必须是单调递增、以点分隔的数字串。 -->
+    <key>CFBundleVersion</key>
+    <string>@TCBW_APP_VERSION@</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>@TCBW_APP_VERSION@</string>
+
+    <!-- Full version including the release channel (0.1.0-rc1). -->
+    <!-- 含发布通道的完整版本号（0.1.0-rc1）。 -->
+    <key>TCBWVersionFull</key>
+    <string>@TCBW_APP_VERSION_FULL@</string>
+
+    <key>TCBWVersionChannel</key>
+    <string>rc1</string>
+
+    <!-- Human facing metadata 面向用户的元数据 -->
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright (c) 2026 turtlelnc. All rights reserved.</string>
+
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+
+    <!-- Display behaviour 显示行为 -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+
+    <!-- Document types 文档类型 -->
+    <!-- `.tcbw` project files are opened with this application. -->
+    <!-- `.tcbw` 工程文件由本应用打开。 -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>TC-BuildWeb Project</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.turtlelnc.tctools.buildweb.project</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>tcbw</string>
+            </array>
+        </dict>
+    </array>
+
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.turtlelnc.tctools.buildweb.project</string>
+            <key>UTTypeDescription</key>
+            <string>TC-BuildWeb Project</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+                <string>public.json</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>tcbw</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+
+    <!-- Usage descriptions 用途说明 -->
+    <!-- The AI assistant and the built-in preview server can open outbound
+         connections and read files the user explicitly picks. The strings below
+         are the minimum Apple requires; they also document the behaviour for
+         users who audit the application.
+         AI 助手与内置预览服务会发起外部连接，并读取用户显式选择的文件。
+         以下字符串是 Apple 的最低要求，同时也向审查应用的用户说明其行为。 -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>TCTools-Build_Web uses the local network to serve your page preview and to reach the AI providers you configure. / TCTools-Build_Web 使用本地网络提供页面预览，并访问你配置的 AI 服务商。</string>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>TCTools-Build_Web needs access to the folder you choose in order to save the pages it exports. / TCTools-Build_Web 需要访问你选择的文件夹，以便保存导出的页面。</string>
+
+    <!-- App Transport Security 应用传输安全 -->
+    <!-- User-configured AI endpoints are frequently plain HTTP on localhost, so
+         local networking is exempted; arbitrary remote HTTP stays blocked.
+         用户配置的 AI 端点常为 localhost 上的明文 HTTP，因此放行本地网络；
+         任意的远程明文 HTTP 仍被阻止。 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+
+    <!-- Minimum OS per architecture 各架构的最低系统版本 -->
+    <key>LSMinimumSystemVersionByArchitecture</key>
+    <dict>
+        <key>arm64</key>
+        <string>11.0</string>
+        <key>x86_64</key>
+        <string>11.0</string>
+    </dict>
+</dict>
+</plist>

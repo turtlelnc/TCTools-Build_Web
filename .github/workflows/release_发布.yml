@@ -1,0 +1,535 @@
+# ============================================================================
+#  release_发布.yml -- tag-triggered release: build installers, publish GitHub Release
+#  release_发布.yml —— 标签触发的发布：构建安装包并发布 GitHub Release
+#
+#  TCTools-Build_Web (TC-BuildWeb) v0.1.0-rc1  --  publisher: turtlelnc
+#
+#  Triggers / 触发方式:
+#    * a tag matching `v*`   -- e.g. v0.1.0-rc1, v0.1.0, v0.2.0-beta2
+#    * 匹配 `v*` 的标签      -- 例如 v0.1.0-rc1、v0.1.0、v0.2.0-beta2
+#    * manual workflow_dispatch with an explicit version string
+#    * 手动 workflow_dispatch，并显式传入版本号
+# ============================================================================
+name: Release 发布
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.1.0-rc1 / 要发布的版本号'
+        required: true
+        default: '0.1.0-rc1'
+        type: string
+      draft:
+        description: 'Create the GitHub Release as a draft / 以草稿形式创建发布'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PRODUCT_NAME: TCTools-Build_Web
+  PUBLISHER: turtlelnc
+  QT_VERSION: '6.8.*'
+  AQT_VERSION: '==3.3.*'
+  QT_MODULES: 'qtcharts qtmultimedia qtshadertools qtquick3d'
+
+jobs:
+  # ==========================================================================
+  #  Validate the tag and compute the canonical version / prerelease flags
+  #  校验标签并计算规范版本号与预发布标记
+  # ==========================================================================
+  version:
+    name: Resolve version 解析版本
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - name: Resolve 解析
+        id: v
+        shell: bash
+        # All logic lives in a reusable script so the tagging rule is documentable
+        # and testable in one place.
+        # 全部逻辑集中在一个可复用脚本中，便于集中记录与测试标签规则。
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == 'workflow_dispatch' ]]; then
+            VERSION='${{ inputs.version }}'
+          else
+            VERSION="${GITHUB_REF_NAME#v}"   # strip the leading `v` / 去掉前缀 `v`
+          fi
+          [[ -n "${VERSION}" ]] || { echo '::error::empty version'; exit 1; }
+          if [[ "${VERSION}" == *-* ]]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+          echo "version=${VERSION}"        >> "${GITHUB_OUTPUT}"
+          echo "tag=v${VERSION}"           >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}"  >> "${GITHUB_OUTPUT}"
+          echo "Resolved version=${VERSION} prerelease=${PRERELEASE}"
+
+      - name: Installer asset names 安装包命名
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Expected assets / 期望产物:"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-windows-x64-setup.exe"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-windows-x86-setup.exe"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-windows-arm64-setup.exe"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-macos-arm64.dmg"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-macos-universal.dmg"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-linux-x86_64.AppImage"
+          echo "  TCBuildWeb-${{ steps.v.outputs.version }}-linux-x86_64.deb"
+
+  # ==========================================================================
+  #  Windows -- NSIS installers for x64 / x86 / ARM64
+  #  Windows —— x64 / x86 / ARM64 的 NSIS 安装包
+  # ==========================================================================
+  windows-installer:
+    name: Windows installer ${{ matrix.arch_label }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: x64
+            runner: windows-latest
+            arch_label: x64
+            arch: x64
+            arch_flag: x64
+            qt_arch: win64_msvc2022_64
+            qt_modules: 'qtcharts qtmultimedia qtshadertools qtquick3d qtwebengine'
+            webengine: 'ON'
+            experimental: false
+          - id: x86
+            runner: windows-latest
+            arch_label: x86
+            arch: x86
+            arch_flag: Win32
+            # No 32-bit MSVC 2022 Qt desktop kit exists -> MinGW 32-bit + Ninja.
+            # 不存在 32 位 MSVC 2022 Qt 桌面套件，故改用 MinGW 32 位 + Ninja。
+            qt_arch: win32_mingw
+            qt_modules: 'qtcharts qtmultimedia'
+            webengine: 'OFF'
+            experimental: false
+          - id: arm64
+            runner: windows-latest
+            arch_label: ARM64
+            arch: arm64
+            arch_flag: ARM64
+            qt_arch: win64_msvc2022_arm64
+            qt_modules: 'qtcharts qtmultimedia'
+            webengine: 'OFF'
+            experimental: false
+    env:
+      TCBW_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          modules: ${{ matrix.qt_modules }}
+          cache: true
+          cache-key-prefix: qt-release-win-${{ matrix.id }}
+          aqtversion: ${{ env.AQT_VERSION }}
+
+      - name: Install NSIS 安装 NSIS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # NSIS 3.x is pre-installed on the hosted Windows images at this path.
+          # NSIS 3.x 已预装于托管 Windows 镜像的该路径。
+          $nsis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (-not (Test-Path -LiteralPath $nsis)) {
+            choco install nsis --no-progress -y
+          }
+          if (-not (Test-Path -LiteralPath $nsis)) { throw "makensis not found after install." }
+          & $nsis /VERSION
+
+      - name: Configure 配置
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($p in @('CMakeLists.txt',
+                           'src_Source_源代码/core_Core_核心/Types.cpp',
+                           'resources_Resources_资源/qml_QML_界面',
+                           'resources_Resources_资源/icons_Icons_图标/app.qrc',
+                           'tests_Tests_测试/CMakeLists.txt')) {
+            if (-not (Test-Path -LiteralPath $p)) { throw "::error::missing -> $p" }
+          }
+          $generator = if ('${{ matrix.id }}' -eq 'x86') { 'Ninja' } else { 'Visual Studio 17 2022' }
+          $args = @('-S', '.', '-B', 'build',
+                    '-DCMAKE_BUILD_TYPE=Release',
+                    "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR",
+                    "-DCMAKE_INSTALL_PREFIX=$PWD/dist/stage",
+                    "-DTCBW_ENABLE_WEBENGINE=${{ matrix.webengine }}",
+                    '-DTCBW_BUILD_TESTS=ON',
+                    "-DTCBW_VERSION_CHANNEL=rc1")
+          if ($generator -eq 'Ninja') {
+            & cmake @args -G Ninja
+          } else {
+            & cmake @args -G $generator -A '${{ matrix.arch_flag }}'
+          }
+          if ($LASTEXITCODE -ne 0) { throw "configure failed ($LASTEXITCODE)" }
+
+      - name: Build and test 构建与测试
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "ctest failed ($LASTEXITCODE)" }
+
+      - name: Stage install 分阶段安装
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --install build --config Release --prefix "$PWD/dist/stage"
+          # `qt_generate_deploy_qml_app_script` already copied the Qt/QML runtime
+          # into the install tree; windeployqt tops up anything it missed and adds
+          # the MinGW runtime DLLs when building with the MinGW kit.
+          # `qt_generate_deploy_qml_app_script` 已把 Qt/QML 运行时安装到目标树；
+          # windeployqt 补齐遗漏项，并在 MinGW 套件下补充 MinGW 运行时 DLL。
+          if ('${{ matrix.id }}' -eq 'x86') {
+            $mingwBin = if (Test-Path 'C:\Mingw-w64\mingw64\bin') { 'C:\Mingw-w64\mingw64\bin' } else { Join-Path $env:QT_ROOT_DIR 'bin' }
+            & '${{ github.workspace }}/packaging_Packaging_打包/windows_Windows/deploy_windows.ps1' `
+              -BinaryDir "$PWD/dist/stage" -QtDir $env:QT_ROOT_DIR -MingwBin $mingwBin
+          } else {
+            & '${{ github.workspace }}/packaging_Packaging_打包/windows_Windows/deploy_windows.ps1' `
+              -BinaryDir "$PWD/dist/stage" -QtDir $env:QT_ROOT_DIR
+          }
+          if ($LASTEXITCODE -ne 0) { throw "deploy failed ($LASTEXITCODE)" }
+
+      - name: Build NSIS installer 生成 NSIS 安装包
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nsis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          $outFile = "TCBuildWeb-$env:TCBW_VERSION-windows-${{ matrix.id }}-setup.exe"
+          $outDir = Join-Path $PWD 'dist'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          & $nsis /V2 `
+            "/DTCBW_VERSION=$env:TCBW_VERSION" `
+            "/DTCBW_STAGE=$PWD/dist/stage" `
+            "/DTCBW_OUTFILE=$outDir\$outFile" `
+            '/DTCBW_ARCH=${{ matrix.arch }}' `
+            'packaging_Packaging_打包/windows_Windows/windows_installer.nsi'
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed ($LASTEXITCODE)" }
+          if (-not (Test-Path -LiteralPath (Join-Path $outDir $outFile))) { throw "installer was not produced: $outFile" }
+          Get-Item -LiteralPath (Join-Path $outDir $outFile) | Format-List Name,Length
+
+      - name: Upload installer 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows-${{ matrix.id }}
+          path: dist/*-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-release-windows-${{ matrix.id }}-${{ github.run_id }}
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  macOS -- arm64 DMG + universal DMG
+  #  macOS —— arm64 DMG 与通用二进制 DMG
+  # ==========================================================================
+  macos-dmg:
+    name: macOS DMG ${{ matrix.arch_label }}
+    needs: version
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: arm64
+            runner: macos-14
+            arch_label: arm64
+            osx_arch: arm64
+            webengine: 'ON'
+          - id: universal
+            runner: macos-14
+            arch_label: universal
+            osx_arch: 'arm64;x86_64'
+            webengine: 'OFF'
+    env:
+      TCBW_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-release-macos-${{ matrix.id }}
+          aqtversion: ${{ env.AQT_VERSION }}
+
+      - name: Install ninja 安装 ninja
+        shell: bash
+        run: command -v ninja >/dev/null || brew install ninja
+
+      - name: Configure, build, test 配置、构建、测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in 'CMakeLists.txt' 'src_Source_源代码/core_Core_核心/Types.cpp' \
+                   'resources_Resources_资源/qml_QML_界面' \
+                   'resources_Resources_资源/icons_Icons_图标/app.qrc' \
+                   'tests_Tests_测试/CMakeLists.txt'; do
+            [[ -e "$p" ]] || { echo "::error::missing -> $p"; exit 1; }
+          done
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DCMAKE_OSX_ARCHITECTURES="${{ matrix.osx_arch }}" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DTCBW_ENABLE_WEBENGINE=${{ matrix.webengine }} \
+            -DTCBW_BUILD_TESTS=ON
+          cmake --build build --parallel
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Stage install and deploy 分阶段安装与部署
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --install build --prefix "$PWD/dist/stage"
+          # `qt_generate_deploy_qml_app_script` embeds the Qt frameworks and QML
+          # modules into the .app bundle during install; the script below verifies
+          # that and fixes up the rpaths.
+          # 安装过程中 `qt_generate_deploy_qml_app_script` 会把 Qt 框架与 QML 模块
+          # 嵌入 .app 包；下面的脚本负责校验并修正 rpath。
+          bash './packaging_Packaging_打包/macos_macOS/deploy_macos.sh' \
+            --app "$PWD/dist/stage/TCTools-Build_Web.app" \
+            --arch "${{ matrix.osx_arch }}" \
+            --qt-dir "${QT_ROOT_DIR}" \
+            --version "${TCBW_VERSION}"
+
+      - name: Build DMG 生成 DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash './packaging_Packaging_打包/macos_macOS/create_dmg.sh' \
+            --app "$PWD/dist/stage/TCTools-Build_Web.app" \
+            --version "${TCBW_VERSION}" \
+            --arch "${{ matrix.id }}" \
+            --output-dir "$PWD/dist"
+
+      - name: Upload DMG 上传 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos-${{ matrix.id }}
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-release-macos-${{ matrix.id }}-${{ github.run_id }}
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  Linux -- AppImage + .deb
+  #  Linux —— AppImage 与 .deb
+  # ==========================================================================
+  linux-packages:
+    name: Linux packages 打包 (AppImage + deb)
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      TCBW_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Checkout 检出代码
+        uses: actions/checkout@v5
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          modules: ${{ env.QT_MODULES }}
+          cache: true
+          cache-key-prefix: qt-release-linux
+          aqtversion: ${{ env.AQT_VERSION }}
+
+      - name: Install packaging prerequisites 安装打包依赖
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache file dpkg-dev fakeroot \
+            desktop-file-utils libgl1-mesa-dev libxkbcommon-x11-dev \
+            libxcb-cursor0 libxcb-icccm4-dev libxcb-keysyms1-dev \
+            libxcb-shape0-dev libxcb-randr0-dev libxcb-render-util0-dev \
+            libxcb-xkb-dev libxkbcommon-dev
+          curl -fsSL -o "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage" \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage"
+
+      - name: Configure, build, test 配置、构建、测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in 'CMakeLists.txt' 'src_Source_源代码/core_Core_核心/Types.cpp' \
+                   'resources_Resources_资源/qml_QML_界面' \
+                   'resources_Resources_资源/icons_Icons_图标/app.qrc' \
+                   'tests_Tests_测试/CMakeLists.txt'; do
+            [[ -e "$p" ]] || { echo "::error::missing -> $p"; exit 1; }
+          done
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DTCBW_ENABLE_WEBENGINE=OFF \
+            -DTCBW_BUILD_TESTS=ON
+          cmake --build build --parallel
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build AppImage 生成 AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TCBW_VERSION APPIMAGE_EXTRACT_AND_RUN=1
+          bash './packaging_Packaging_打包/linux_Linux/build_appimage.sh' \
+            --build-dir "$PWD/build" \
+            --output-dir "$PWD/dist" \
+            --linuxdeploy "${RUNNER_TEMP}/linuxdeploy-x86_64.AppImage" \
+            --version "${TCBW_VERSION}"
+
+      - name: Build .deb 生成 .deb
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash './packaging_Packaging_打包/linux_Linux/deploy_linux.sh' \
+            --build-dir "$PWD/build" \
+            --output-dir "$PWD/dist" \
+            --version "${TCBW_VERSION}"
+
+      - name: Upload Linux packages 上传 Linux 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload logs 上传日志
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-release-linux-${{ github.run_id }}
+          path: |
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ==========================================================================
+  #  Publish -- collect every installer and create the GitHub Release
+  #  发布 —— 汇总全部安装包并创建 GitHub Release
+  # ==========================================================================
+  publish:
+    name: Publish GitHub Release 发布 GitHub Release
+    needs: [version, windows-installer, macos-dmg, linux-packages]
+    if: ${{ !cancelled() && needs.version.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download all installers 下载全部安装包
+        uses: actions/download-artifact@v5
+        with:
+          pattern: installer-*
+          path: dist
+          merge-multiple: true
+
+      - name: List release assets 列出发布产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -type f -printf '%P  (%s bytes)\n' | sort || ls -lR dist
+          count=$(find dist -type f | wc -l)
+          echo "asset_count=${count}" >> "${GITHUB_STEP_SUMMARY}"
+          if (( count == 0 )); then
+            echo "::error::no installer artifacts were produced; refusing to publish an empty release."
+            exit 1
+          fi
+
+      - name: Create GitHub Release 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: TCTools-Build_Web ${{ needs.version.outputs.version }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          prerelease: ${{ needs.version.outputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## TCTools-Build_Web ${{ needs.version.outputs.version }}
+
+            Visual web page builder: drag-and-drop layout plus Scratch-style block
+            programming, exporting `.html` / `.js`, with an optional AI assistant.
+            可视化网页构建器：拖放式布局 + Scratch 风格积木编程，导出 `.html` / `.js`，
+            并内置可选的 AI 助手。
+
+            ### Downloads 下载
+            | Platform 平台 | Architecture 架构 | File 文件 |
+            | --- | --- | --- |
+            | Windows 11 / 10 1709+ | x64 | `*-windows-x64-setup.exe` |
+            | Windows 11 / 10 1709+ | x86 | `*-windows-x86-setup.exe` |
+            | Windows 11 on ARM | ARM64 | `*-windows-arm64-setup.exe` |
+            | macOS | Apple Silicon (arm64) | `*-macos-arm64.dmg` |
+            | macOS | Universal (arm64 + x86_64) | `*-macos-universal.dmg` |
+            | Linux | x86_64 | `*-linux-x86_64.AppImage` |
+            | Debian/Ubuntu | amd64 | `*-linux-x86_64.deb` |
+
+            Publisher 发布者: **turtlelnc**
+          files: |
+            dist/*-setup.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

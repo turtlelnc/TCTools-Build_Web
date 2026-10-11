@@ -42,6 +42,38 @@
 build/
 Build/
 build-*/
+# Every local build tree, whatever generator and load-bearing suffix is used
+# (e.g. `build_构建` for MinGW Makefiles, `build_make_构建` for the archiver test).
+# 所有本地构建目录，无论使用何种生成器与后缀（例如 MinGW Makefiles 的
+# `build_构建`、归档器试验用的 `build_make_构建`）。
+build_*/
+build*/
+
+# Qt / QML build artefacts
+*.qmlc
+*.jsc
+qmlcache/
+.qmllint.ini
+Makefile.Debug
+Makefile.Release
+*.user
+*.user.*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.kdev4
+compile_commands.json
+.cache/
+ccache/
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch used by the documentation PDF pipeline
+docs_Documentation_文档/**/*.build.html
 
 # CMake generated files
 CMakeFiles/
